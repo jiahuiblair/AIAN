@@ -9,4 +9,5 @@ factors affecting the patient's access to healthcare resources.
 
 Workflow: 
 1. Data cleaning
-2. 
+2. Descriptive and Inferential analysis
+3. Geo-plot of the patient distribution and the cancer center location 
