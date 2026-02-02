@@ -6,7 +6,6 @@ library(lubridate)
 
 # Import Excel files and add year column
 mainreport <- read_excel("C:/Users/Jiahui/Documents/Loop/BillingsClinic/Pfizer/PFIZER report ONC patients Dec 1 2023 to Nov 30 2025.xlsx", sheet = "Main Report")
-#Newreport <- read_excel("C:/Users/Jiahui/Documents/Loop/BillingsClinic/Pfizer/PFIZER report AI_AN ONC patients IP and OP visits.xlsx")
 
 ## Create new columns based on analysis requirement
 # Create the date column for admit, dx and death
@@ -29,9 +28,9 @@ mainreport <- mainreport %>% # only keep the date
     die_date    = as.Date(die_dt),
   )
 
-# Create the visit order by the admit time and patinent identity
+# Create the visit order by the admit time and patient identity
 mainreport <- mainreport %>%
-  arrange(`MRN- Community`, admit_date) %>%   # or admit_dt if you kept POSIXct
+  arrange(`MRN- Community`, admit_date) %>%   
   group_by(`MRN- Community`) %>%
   mutate(
     Visit_Order = row_number()
@@ -39,7 +38,7 @@ mainreport <- mainreport %>%
   ungroup() %>%
   arrange(`MRN- Community`, admit_date)
 
-# Create the first diagnosis time by the dx time and patinent identity
+# Create the first diagnosis time by the dx time and patient identity
 mainreport <- mainreport %>%
   arrange(`MRN- Community`, dx_date) %>%   # or admit_dt if you kept POSIXct
   group_by(`MRN- Community`) %>%
@@ -56,7 +55,7 @@ mainreport <- mainreport %>%
   ) %>%
   ungroup()
 
-# Age Interval: 25-50; 51-65; 66-75; 76+
+## Age Interval: 25-50; 51-65; 66-75; 76+
 mainreport <- mainreport %>%
   mutate(
     Age_interval = case_when(
@@ -68,66 +67,7 @@ mainreport <- mainreport %>%
     )
   )
 
-### ICD grouping 
-### Group ICD 
-icd_groups <- tibble(
-  group = c(
-    "C00-C14",
-    "C15-C26",
-    "C30-C39",
-    "C40-C41",
-    "C43-C44",
-    "C45-C49",
-    "C50-C50",
-    "C51-C58",
-    "C60-C63",
-    "C64-C68",
-    "C69-C72",
-    "C73-C75",
-    "C76-C80",
-    "C7A-C7A",
-    "C7B-C7B",
-    "C81-C96",
-    "D00-D09",
-    "D10-D36",
-    "D37-D48",
-    "D3A-D3A",
-    "D49-D49"
-  ),
-  start = c(
-    "C00","C15","C30","C40","C43","C45","C50","C51","C60","C64",
-    "C69","C73","C76","C7A","C7B","C81","D00","D10","D37","D3A","D49"
-  ),
-  end = c(
-    "C14","C26","C39","C41","C44","C49","C50","C58","C63","C68",
-    "C72","C75","C80","C7A","C7B","C96","D09","D36","D48","D3A","D49"
-  )
-)
-
-## assign function 
-assign_icd_group <- function(code) {
-  if (is.na(code)) return(NA_character_)
-  
-  base <- str_extract(code, "^[A-Z][0-9A-Z]{2}")
-  if (is.na(base)) return(NA_character_)
-  
-  match <- icd_groups %>%
-    filter(start <= base & end >= base)
-  
-  if (nrow(match) == 0) {
-    return("Other / Out of range")
-  } else {
-    return(match$group[1])
-  }
-}
-
-# Assign group 
-mainreport <- mainreport %>%
-  mutate(Diagnosis_Group = sapply(`Diagnosis Code`, assign_icd_group))
-
-
-
-# State and County 
+## State and County 
 mainreport <- mainreport %>%
   mutate(
     State = str_trim(str_extract(`Person Address- State & County`, "^[^-]+")),
@@ -135,7 +75,7 @@ mainreport <- mainreport %>%
   )
 
 
-# Calculate the time difference between dignosis time and admitted time
+#### Calculate the time difference between dignosis time and admitted time
 mainreport <- mainreport %>%
   mutate(
     days_dx_to_admit = as.numeric(admit_date - dx_date),
@@ -147,48 +87,9 @@ mainreport <- mainreport %>%
     admit_dx = ifelse(days_dx_to_admit<0,"Admit Before DX", admit_dx)
   )
 
-
-
-
-# Subset the data for the American Indian 
-AIAN_allDX <- mainreport %>%
+#################################### Subset the data for the American Indian 
+AIAN <- mainreport %>%
   filter(Race == 'American Indian or Alaska Native')
-
-# # Create the ICD group variable 
-# valid_groups <- AIAN_allDX %>%
-#   count(Diagnosis_Group) %>%
-#   filter(n > 20) %>%
-#   pull(Diagnosis_Group)
-# 
-# patient_dx <- AIAN_allDX %>%
-#   filter(Diagnosis_Group %in% valid_groups) %>%
-#   distinct(`MRN- Community`, Diagnosis_Group) %>%
-#   mutate(value = 1) %>%
-#   pivot_wider(
-#     names_from  = Diagnosis_Group,
-#     values_from = value,
-#     values_fill = list(value = 0)
-#   )
-# 
-# colnames(patient_dx) <- c(
-#   "MRN- Community",
-#   paste0(
-#     "Dx_",
-#     make.names(colnames(patient_dx)[-1])
-#   )
-# )
-# 
-# AIAN_allDX <- AIAN_allDX %>%
-#   left_join(patient_dx, by = "MRN- Community") %>%
-#   mutate(
-#     across(
-#       starts_with("Dx_") & where(is.numeric),
-#       ~ replace_na(., 0)
-#     )
-#   )
-
-AIAN <- AIAN_allDX %>%
-  filter(Include == 'Yes')
 
 # Create new insurance & Encounter types
 AIAN <- AIAN %>%
@@ -217,11 +118,7 @@ AIAN <- AIAN %>%
                                                                   "RAD ONC Brief Virtual Visit","Gyn Onc Phone Call"),
                                          "Procedure/Lab" = c("RAD ONC CT Simulation", "HEM ONC Bone Marrow Procedure","RAD ONC HDR CT Simulation","HEM ONC Oncology Lab"),
                                          "Treatment" = c("RAD ONC SBR Treatment", "RAD ONC Treatment w/ Physician","RAD ONC Treatment","HEM ONC","RAD ONC HDR Treatment")
-                                       ),
-    Ethnic_Regroup = fct_collapse(`Ethnic Group`,
-                                  "Crow/Apsaalooke" = c("Crow/Apsaalooke"),
-                                  "Northern Cheyenne/Tsistsistas" = c("Northern Cheyenne/Tsistsistas")
-                                  )
+                                       )
   )
 
 AIAN <- AIAN %>%
@@ -229,33 +126,8 @@ AIAN <- AIAN %>%
     Rural = ifelse(`RUCA Codes Primary` %in% c(10, 2), "Rural", "Urban")
   )
 
-# Merge with the Newreport
-# AIANmerge <- merge(AIAN, Newreport_clean[, c("MRN- Community", "Admit Date & Time", "Diagnosis Date & Time", "Appointment Type- Short", "Appointment Status- Short", "Medical Service", "Encounter Type Class", "Encounter Status")], 
-#                   by = c("MRN- Community", "Admit Date & Time", "Diagnosis Date & Time"), all.x = TRUE)
-
-# Remove duplicates based on your three key columns
-# AIANmerge_clean <- AIANmerge %>%
-#  distinct(`MRN- Community`, `Admit Date & Time`, .keep_all = TRUE)
-
-
-# Descriptive 
+# Descriptive Analysis
 # Patient level 
-patient_demo <- AIAN %>%
-  arrange(`MRN- Community`, Visit_Order) %>%
-  group_by(`MRN- Community`) %>%
-  summarise(
-    Sex = unique(Sex),
-    Race = unique(Race),
-    Ethnic_Group = unique(`Ethnic Group`),
-    RUCA = unique(`RUCA Codes Primary`),
-    age_mean = mean(`Age- Years (Visit)`),
-    age_sd = sd(`Age- Years (Visit)`),
-    age_gap = max(`Age- Years (Visit)`)-min(`Age- Years (Visit)`),
-    #primary_insurance = unique(`Primary Insurance Name from encntr_plan_reltn`),
-    #secondary_insurance = unique(`Secondary Insurance Name from encntr_plan_reltn`),
-    .groups = "drop"
-  )
-
 AIAN_patient <- AIAN %>%
   group_by(`MRN- Community`) %>%
   slice(1) %>%
@@ -268,6 +140,7 @@ patient_descriptive <- list(
   RUCA = AIAN_patient %>% count(`RUCA Codes Primary`)
 )
 
+# Hospital appointment visit level 
 Diagnosis_description <- list(
   dx = AIAN %>% count(`Diagnosis Code`)
 )
@@ -281,14 +154,14 @@ visit_descriptive <- list(
 )
 
 # visit day and dx day 
-visit_day_dx_rural <- AIAN %>%
+visit_day_dx_rural <- AIAN %>% 
   group_by(admit_dx, Rural) %>%
   summarise(
     count = n(),
     avrage_day = mean(abs(days_dx_to_admit), na.rm = TRUE),
     sd_day = sd(abs(days_dx_to_admit), na.rm = TRUE),
     median_day = median(abs(days_dx_to_admit), na.rm = TRUE)
-  )
+  ) # Check the time gap between visits day and dignosis day differentiated by Rural/Urban patients
 
 visit_day_dx_appoint <- AIAN %>%
   group_by(admit_dx,Appointment_Regrouped) %>%
@@ -297,81 +170,22 @@ visit_day_dx_appoint <- AIAN %>%
     avrage_day = mean(abs(days_dx_to_admit), na.rm = TRUE),
     sd_day = sd(abs(days_dx_to_admit), na.rm = TRUE),
     median_day = median(abs(days_dx_to_admit), na.rm = TRUE)
-  )
+  ) # Check the time gap between visits day and dignosis day differentiated by appointment types 
 
-visit_day_dx_rural_appoint <- AIAN %>%
-  group_by(admit_dx, Rural, Appointment_Regrouped) %>%
-  summarise(
-    count = n(),
-    avrage_day = mean(abs(days_dx_to_admit), na.rm = TRUE),
-    sd_day = sd(abs(days_dx_to_admit), na.rm = TRUE),
-    median_day = median(abs(days_dx_to_admit), na.rm = TRUE)
-  )
 
-visit_day_dx_ICD <- AIAN %>%
-  group_by(admit_dx, `Diagnosis Code`) %>%
-  summarise(
-    count = n(),
-    avrage_day = mean(abs(days_dx_to_admit), na.rm = TRUE),
-    sd_day = sd(abs(days_dx_to_admit), na.rm = TRUE),
-    median_day = median(abs(days_dx_to_admit), na.rm = TRUE)
-  )
-
-# days of death 
-death_day <- AIAN %>%
-  filter(days_dx_to_die>0) %>%
-  group_by(`MRN- Community`) %>%  
-  slice(1) %>%
-  ungroup() %>% 
-  summarise(
-    count = n(),
-    avrage_day = mean(abs(days_dx_to_die), na.rm = TRUE),
-    sd_day = sd(abs(days_dx_to_die), na.rm = TRUE),
-    median_day = median(abs(days_dx_to_die), na.rm = TRUE)
-  )
-
-## Calculate the patients count from northeast 
-northeastPV <- AIAN %>%
-  filter(`Person Address- State & County` %in% c("MT - Roosevelt", "MT - Blaine", "MT - Valley", "MT - Sheridan", "ND - Williams")) %>%
-  group_by(`MRN- Community`) %>%
-  slice(1) %>%
-  ungroup() # average visits per patient = 134/20 = 6.7
-
-## Inferential 
+## Inferential analysis 
 AIAN <- AIAN %>%
   mutate(admit_dx = as.factor(admit_dx))
-
-dx_vars <- AIAN %>%
-  select(starts_with("Dx_")) %>%
-  names()
-
-chisq_safe <- function(dx_var, data) {
-  tbl <- table(data[[dx_var]], data$admit_dx)
-  test <- suppressWarnings(chisq.test(tbl))
-  tibble(
-    dx_variable = dx_var,
-    chi_sq = unname(test$statistic),
-    df = unname(test$parameter),
-    p_value = test$p.value
-  )
-}
-chi_results <- map_dfr(dx_vars, chisq_safe, data = AIAN)
 
 # rural test
 data_tabler <- table(AIAN$admit_dx, AIAN$Rural)
 chisq.test(data_tabler)
 mosaicplot(data_tabler, shade = TRUE, main = "Rural Patient")
 
-mosaicplot(data_tabler, shade = TRUE, legend = FALSE)
-
-
 # appointment type
 data_tableapp <- table(AIAN$admit_dx, AIAN$Appointment_Regrouped)
 chisq.test(data_tableapp)
 mosaicplot(data_tableapp, shade = TRUE, main = "Apponitnment type", legend = FALSE)
-
-data_tableappr <- table(AIAN$Rural, AIAN$Appointment_Regrouped) # No sig 
-chisq.test(data_tableappr)
 
 # insurance 
 data_tableinsp <- table(AIAN$admit_dx, AIAN$Primary_Regrouped)
@@ -392,7 +206,7 @@ data_tablegen <- table(AIAN$admit_dx, AIAN$Sex) # sig but not intereted to the r
 chisq.test(data_tablegen)
 mosaicplot(data_tablegen, shade = TRUE, main = "Gender")
 
-## Three states: MT, WY and ND
+##### Geographic plot of patient population to the cancer center 
 ## Load required libraries
 library(usmap)      # state boundaries
 library(zipcodeR)   # ZIP → lat/long
@@ -534,140 +348,8 @@ ggplot() +
   ) +
   labs(
     title = "Regional Patient Distribution",
-    subtitle = "MT, WY, and ND Service Area",
+    subtitle = "Service Area",
     caption = "Data based on unique MRN per county"
   )
 
 
-
-
-
-
-
-
-# ## Plot the Montana patients
-# library(usmap)      # state boundaries
-# library(zipcodeR)   # ZIP → lat/long
-# library(tigris)
-# 
-# AIAN <- AIAN %>%
-#   mutate(
-#     zip = as.character(`Person Address- Zip Code`)
-#   )
-# 
-# # Join the latitude and longtitude
-# zip_data <- zipcodeR::zip_code_db
-# 
-# AIAN_geo <- AIAN %>%
-#   left_join(
-#     zip_data %>% 
-#       select(zipcode, lat, lng, state),
-#     by = c("zip" = "zipcode")
-#   )
-# 
-# MT_patients <- AIAN_geo %>%
-#   filter(state == "MT")
-# 
-# mt_county_map_data <- MT_patients %>%
-#   group_by(County_Name) %>%
-#   summarise(
-#     n_patients = n_distinct(`MRN- Community`),
-#     .groups = "drop"
-#   )
-# 
-# options(tigris_use_cache = TRUE)
-# 
-# mt_counties <- counties(
-#   state = "MT",
-#   year = 2022,
-#   cb = TRUE
-# )
-# 
-# mt_counties <- mt_counties %>%
-#   mutate(
-#     County_Name = gsub(" County", "", NAME)
-#   )
-# 
-# mt_map_data <- mt_counties %>%
-#   left_join(
-#     mt_county_map_data,
-#     by = "County_Name"
-#   ) %>%
-#   mutate(
-#     n_patients = if_else(is.na(n_patients), 0L, n_patients)
-#   )
-# 
-# mt_state <- states(cb = TRUE, year = 2022) %>%
-#   dplyr::filter(STUSPS == "MT")
-# 
-# library(sf)
-# library(ggrepel) # For better label placement
-# 
-# # 1. Create a data frame for the clinic location
-# clinic_loc <- data.frame(
-#   name = "Cancer Center",
-#   lat = 45.79,
-#   lng = -108.51
-# ) %>%
-#   st_as_sf(coords = c("lng", "lat"), crs = st_crs(mt_state))
-# 
-# # 2. Update the Plot
-# ggplot() +
-#   ## Montana outline
-#   geom_sf(
-#     data = mt_state,
-#     fill = "gray95",
-#     color = "black",
-#     linewidth = 0.6
-#   ) +
-#   
-#   ## Counties with patients
-#   geom_sf(
-#     data = mt_map_data,
-#     aes(fill = ifelse(n_patients > 0, n_patients, NA)),
-#     color = "white",
-#     linewidth = 0.2
-#   ) +
-#   
-#   ## Add the Clinic as a Star
-#   geom_sf(
-#     data = clinic_loc,
-#     shape = 18,      # Diamond/Star shape (18 or 8 work well)
-#     size = 4,
-#     color = "red"    # Use a high-contrast color
-#   ) +
-#   
-#   ## Add the Label (optional but recommended)
-#   geom_sf_text(
-#     data = clinic_loc,
-#     aes(label = name),
-#     size = 3,
-#     fontface = "bold",
-#     nudge_y = 0.3    # Moves text slightly above the star
-#   ) +
-#   
-#   scale_fill_gradient(
-#     name = "Patients Count",
-#     low = "#deebf7",
-#     high = "#08519c",
-#     na.value = "transparent"
-#   ) +
-#   
-#   theme(
-#     legend.text = element_text(size = 4),   # Size of the numbers
-#     legend.title = element_text(size = 6)  # Size of "Number of Patients"
-#   ) +
-#   
-#   coord_sf(datum = NA) + 
-#   
-#   theme_minimal() +
-#   theme(
-#     axis.text = element_blank(),
-#     axis.title = element_blank(),
-#     panel.grid = element_blank()
-#   ) +
-#   labs(
-#     title = "Geographic Distribution of Patients by County in Montana",
-#     subtitle = "Red star indicates Billings Clinic Cancer Center",
-#     caption = "Out-of-state participants (Wyoming, n=1; North Dakota, n=1) are not represented in the county-level distribution."
-#   )
